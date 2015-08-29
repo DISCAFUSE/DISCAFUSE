@@ -31,19 +31,13 @@ def main():
     bam_reader = pysam.Samfile(alignments_bam)
 
     proper_pairs = set()
-    discounted_proper_pairs = set()
 
     for read in bam_reader:
         if (not read.is_supplementary) and read.is_proper_pair:
-            pct_aligned = read.query_alignment_length / read.query_length * 100.0
-            if pct_aligned < MIN_PCT_ALIGNED:
-                discounted_proper_pairs.add(read.query_name)
-            else:
-                proper_pairs.add(read.query_name)
+            proper_pairs.add(read.query_name)
 
     
-    proper_pairs -= discounted_proper_pairs
-    proper_pairs -= want_pairs
+    proper_pairs -= want_pairs # likely unnecessary, just ensuring all our chimeric pairs are included here.
     
 
     left_fq_extracted_filename = os.path.basename(left_fq_filename) + ".extracted.fq"
