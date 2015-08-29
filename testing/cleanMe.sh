@@ -1,1 +1,1 @@
-rm -rf ./daf_outdir
+rm -rf ./daf_outdir ./SFdaf_outdir
