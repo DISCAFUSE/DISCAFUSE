@@ -9,8 +9,9 @@ use FindBin;
 use lib "$FindBin::Bin/../PerlLib";
 require "overlapping_nucs.ph";
 
-my $MAX_ALLOWED_PCT_OVERLAP = 50;
+my $MAX_ALLOWED_PCT_OVERLAP = 10;
 my $MIN_PER_ID = 90;
+my $MIN_ANCHOR_LEN = 30;
 
 my $DEBUG = 1;
 
@@ -91,6 +92,8 @@ sub report_fusion_candidates {
         
         @aligns = sort {$a->{trans_lend}<=>$b->{trans_lend}} @aligns;
 
+        my @fusion_preds;
+
         for (my $i = 0; $i < $#aligns; $i++) {
 
             my $align_i = $aligns[$i];
@@ -99,6 +102,10 @@ sub report_fusion_candidates {
             my $lend_i = $align_i->{trans_lend};
             my $rend_i = $align_i->{trans_rend};
             my $per_id_i = $align_i->{per_id};
+            my $seg_len_i = $rend_i - $lend_i + 1;
+            
+            if ($seg_len_i < $MIN_ANCHOR_LEN) { next; }
+
 
             for (my $j = $i + 1; $j <= $#aligns; $j++) {
                 
@@ -108,23 +115,50 @@ sub report_fusion_candidates {
                 my $lend_j = $align_j->{trans_lend};
                 my $rend_j = $align_j->{trans_rend};
                 my $per_id_j = $align_j->{per_id};
+                my $seg_len_j = $rend_j - $lend_j + 1;
+
+
+                if ($seg_len_j < $MIN_ANCHOR_LEN) { next; }
 
                 my $pct_overlap = &get_percent_overlap([$lend_i, $rend_i], [$lend_j, $rend_j]);
+
+                my $delta = abs($lend_j -1 - $rend_i);
+                my ($overlap_len, $gap_len) = ($lend_j >= $rend_i) ? ($delta, 0) : (0, $delta);
+                
 
                 if ($pct_overlap < $MAX_ALLOWED_PCT_OVERLAP) {
 
                     my ($left_gene, $right_gene) = ($align_i->{gene_orient} eq '+') ? ($align_i, $align_j) : ($align_j, $align_i);
                     
-                    ## report candidate
-                    my $fusion_name = join("--", $left_gene->{gene_name}, $right_gene->{gene_name});
-                    
-                    print join("\t", $fusion_name, $trans_id,
-                               $left_gene->{gene_name}, $left_gene->{trans_lend}, $left_gene->{trans_rend}, $left_gene->{gene_orient}, $left_gene->{per_id} . "\%ID",
-                               $right_gene->{gene_name}, $right_gene->{trans_lend}, $right_gene->{trans_rend}, $right_gene->{gene_orient}, $right_gene->{per_id} . "\%ID") . "\n";
-                    
+                    my $score = ($seg_len_i * $per_id_i) + ($seg_len_j * $per_id_j) 
+                        - ($overlap_len * $per_id_i/2) - ($overlap_len * $per_id_j/2)
+                        - ($gap_len * 100); 
 
+                    push (@fusion_preds, [$left_gene, $right_gene, $score]);
+                    
                 }
             }
+        }
+        
+        @fusion_preds = reverse sort {$a->[2]<=>$b->[2]} @fusion_preds;
+
+        my %seen;
+
+        foreach my $fusion_pred (@fusion_preds) {
+
+            my ($left_gene, $right_gene, $score) = @$fusion_pred;
+            
+            ## report candidate
+            my $fusion_name = join("--", $left_gene->{gene_name}, $right_gene->{gene_name});
+            
+            if ($seen{$fusion_name}) { next; }
+            $seen{$fusion_name} = 1;
+            
+            print join("\t", $fusion_name, $trans_id,
+                       $left_gene->{gene_name}, $left_gene->{trans_lend}, $left_gene->{trans_rend}, $left_gene->{gene_orient}, $left_gene->{per_id} . "\%ID",
+                       $right_gene->{gene_name}, $right_gene->{trans_lend}, $right_gene->{trans_rend}, $right_gene->{gene_orient}, $right_gene->{per_id} . "\%ID",
+                $score) . "\n";
+            
         }
     }
 }
