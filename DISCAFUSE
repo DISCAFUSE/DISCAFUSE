@@ -154,12 +154,18 @@ class DiscordAFuse( ParentScript.ParentScript ):
 
         else:
             # oases
-            # //TODO
 
-            pass
+            cmdstr = str(UTILDIR + "/run_OASES.pl " + discordant_left_fq_filename +
+                         " "  + discordant_right_fq_filename + " oases_out_dir ")
+
+            assembled_transcripts_filename = "oases_out_dir/oases.transcripts.fa"
+
+            lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
+                                                  lstr_cur_dependencies = [discordant_left_fq_filename, discordant_right_fq_filename],
+                                                  lstr_cur_products = [assembled_transcripts_filename] ) )
         
 
-
+        
 
         # map to genome
 
