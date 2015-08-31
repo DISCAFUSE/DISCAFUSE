@@ -86,6 +86,9 @@ main: {
 sub report_fusion_candidates {
     my ($trans_to_gene_alignments_href) = @_;
 
+    my @final_fusion_preds;
+
+
     foreach my $trans_id (keys %$trans_to_gene_alignments_href) {
         
         my @aligns = @{$trans_to_gene_alignments_href->{$trans_id}};
@@ -143,7 +146,7 @@ sub report_fusion_candidates {
         @fusion_preds = reverse sort {$a->[2]<=>$b->[2]} @fusion_preds;
 
         my %seen;
-
+        
         foreach my $fusion_pred (@fusion_preds) {
 
             my ($left_gene, $right_gene, $score) = @$fusion_pred;
@@ -154,13 +157,45 @@ sub report_fusion_candidates {
             if ($seen{$fusion_name}) { next; }
             $seen{$fusion_name} = 1;
             
-            print join("\t", $fusion_name, $trans_id,
-                       $left_gene->{gene_name}, $left_gene->{trans_lend}, $left_gene->{trans_rend}, $left_gene->{gene_orient}, $left_gene->{per_id} . "\%ID",
-                       $right_gene->{gene_name}, $right_gene->{trans_lend}, $right_gene->{trans_rend}, $right_gene->{gene_orient}, $right_gene->{per_id} . "\%ID",
-                $score) . "\n";
+            push (@final_fusion_preds, { 
+                
+                trans_id => $trans_id,
+                left_gene => $left_gene,
+                right_gene => $right_gene,
+                fusion_name => $fusion_name,
+                score => $score,
+                
+                  } );
             
         }
+        
     }
+    
+
+    
+    # sort lexically by fusion name - easier to compare lists
+    
+    @final_fusion_preds = sort {$a->{fusion_name} cmp $b->{fusion_name}} @final_fusion_preds;
+    
+    
+    foreach my $fusion_pred (@final_fusion_preds) {
+        
+        my ($fusion_name, $trans_id, $left_gene, $right_gene, $score) = ($fusion_pred->{fusion_name},
+                                                                         $fusion_pred->{trans_id},
+                                                                         $fusion_pred->{left_gene},
+                                                                         $fusion_pred->{right_gene},
+                                                                         $fusion_pred->{score});
+        
+        print join("\t", $fusion_name, $trans_id,
+                   $left_gene->{gene_name}, $left_gene->{trans_lend}, $left_gene->{trans_rend}, $left_gene->{gene_orient}, $left_gene->{per_id} . "\%ID",
+                   $right_gene->{gene_name}, $right_gene->{trans_lend}, $right_gene->{trans_rend}, $right_gene->{gene_orient}, $right_gene->{per_id} . "\%ID",
+                   $score) . "\n";
+        
+    }
+    
+    
+
+    return;
 }
 
 
