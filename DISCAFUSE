@@ -64,8 +64,8 @@ class DiscordAFuse( ParentScript.ParentScript ):
         args = args_parsed
 
         aligned_bam_filename = None
-        if args_parsed.has_attr("aligned_bam_filename"):
-            aligned_bam_file = args_parsed.aligned_bam_filename
+        if args_parsed.aligned_bam_filename:
+            aligned_bam_filename = args_parsed.aligned_bam_filename
             aligned_bam_filename = ensure_full_path(aligned_bam_filename)
         
         chimeric_junctions_filename = ensure_full_path(args.chimeric_junctions)
@@ -115,7 +115,7 @@ class DiscordAFuse( ParentScript.ParentScript ):
             lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
                                                   lstr_cur_dependencies = [ aligned_bam_filename, left_fq_filename, right_fq_filename ],
                                                   lstr_cur_products = [discordant_left_fq_filename, discordant_right_fq_filename] ) )
-
+            
         else:
 
             ## Just the chimeric reads as per STAR
