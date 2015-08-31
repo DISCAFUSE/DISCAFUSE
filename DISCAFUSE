@@ -35,7 +35,8 @@ class DiscordAFuse( ParentScript.ParentScript ):
         arg_raw.prog = "DiscordAFuse"
         arg_raw.description = "extracts genome-aligned discordant and unmapped reads, de novo assembles them, and then identifies evidence for potential fusions."
 
-        arg_raw.add_argument("--chimeric_junctions", dest="chimeric_junctions", required=True, help="aligned bam file from your favorite rna-seq alignment tool")
+        arg_raw.add_argument("--chimeric_junctions", dest="chimeric_junctions", required=True, help="STAR Chimeric.out.junction file")
+        arg_raw.add_argument("--aligned_bam", dest="aligned_bam_filename", required=False, help="aligned bam file from your favorite rna-seq alignment tool")
         arg_raw.add_argument("--genome_fa", dest="genome_fasta_filename", required=True, help="genome sequence in fasta format")
         arg_raw.add_argument("--cdna_fa", dest="cdna_fasta_filename", required=True, help="cdna fasta file")
         arg_raw.add_argument("--left_fq", dest="left_fq_filename", required=True, help="left fastq file")
@@ -61,6 +62,11 @@ class DiscordAFuse( ParentScript.ParentScript ):
         """
 
         args = args_parsed
+
+        aligned_bam_filename = None
+        if args_parsed.has_attr("aligned_bam_filename"):
+            aligned_bam_file = args_parsed.aligned_bam_filename
+            aligned_bam_filename = ensure_full_path(aligned_bam_filename)
         
         chimeric_junctions_filename = ensure_full_path(args.chimeric_junctions)
         left_fq_filename = ensure_full_path(args.left_fq_filename)
@@ -92,17 +98,39 @@ class DiscordAFuse( ParentScript.ParentScript ):
         ## Extract the discordant and unmapped reads into fastq files
         
         lcmd_commands = []
-        
-        cmdstr = str( os.sep.join([UTILDIR, "retrieve_SF_chimeric_reads.py"]) + " " + chimeric_junctions_filename +
-                                  " " + left_fq_filename + " " + right_fq_filename )
 
-        discordant_left_fq_filename = os.path.basename(left_fq_filename) + ".extracted.fq"
-        discordant_right_fq_filename = os.path.basename(right_fq_filename) + ".extracted.fq"
+        if aligned_bam_filename:
 
-        
-        lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
-                                              lstr_cur_dependencies = [ chimeric_junctions_filename, left_fq_filename, right_fq_filename ],
-                                              lstr_cur_products = [discordant_left_fq_filename, discordant_right_fq_filename] ) )
+            ## Using both the Chimeric reads and those reads that failed to map to the genome.
+
+            cmdstr = str( os.sep.join([UTILDIR, "retrieve_SF_chimeric_and_unmapped_reads.py"]) +
+                          " " + aligned_bam_filename +
+                          " " + chimeric_junctions_filename + 
+                          " " + left_fq_filename + " " + right_fq_filename )
+
+            discordant_left_fq_filename = os.path.basename(left_fq_filename) + ".extracted.fq"
+            discordant_right_fq_filename = os.path.basename(right_fq_filename) + ".extracted.fq"
+
+
+            lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
+                                                  lstr_cur_dependencies = [ aligned_bam_filename, left_fq_filename, right_fq_filename ],
+                                                  lstr_cur_products = [discordant_left_fq_filename, discordant_right_fq_filename] ) )
+
+        else:
+
+            ## Just the chimeric reads as per STAR
+            
+            cmdstr = str( os.sep.join([UTILDIR, "retrieve_SF_chimeric_reads.py"]) +
+                          " " + chimeric_junctions_filename +
+                          " " + left_fq_filename + " " + right_fq_filename )
+            
+            discordant_left_fq_filename = os.path.basename(left_fq_filename) + ".extracted.fq"
+            discordant_right_fq_filename = os.path.basename(right_fq_filename) + ".extracted.fq"
+
+
+            lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
+                                                  lstr_cur_dependencies = [ chimeric_junctions_filename, left_fq_filename, right_fq_filename ],
+                                                  lstr_cur_products = [discordant_left_fq_filename, discordant_right_fq_filename] ) )
 
         ## De novo assemble the extracted reads
 
