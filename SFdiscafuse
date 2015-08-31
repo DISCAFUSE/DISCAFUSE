@@ -132,7 +132,7 @@ class DiscordAFuse( ParentScript.ParentScript ):
         
 
 
-        '''
+
         # map to genome
 
         trans_alignment_gff3 = "denovo_asm.gmap.gff3"
@@ -174,9 +174,6 @@ class DiscordAFuse( ParentScript.ParentScript ):
                                               lstr_cur_dependencies = [pct_alignment_stats_file, assembled_transcripts_filename],
                                               lstr_cur_products = [candidate_transcripts_file] ) )
         
-        '''
-        
-
 
 
         # BLAT worked better for this
@@ -212,7 +209,7 @@ class DiscordAFuse( ParentScript.ParentScript ):
         # BLAT map to transcriptome the ones that dont align fine to the genome
 
 
-        candidate_transcripts_file = assembled_transcripts_filename
+        #candidate_transcripts_file = assembled_transcripts_filename
         
         trans_chimera_align_file = candidate_transcripts_file + ".trans_blat.gff3"
         

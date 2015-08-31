@@ -18,7 +18,7 @@ my $CPU = 1;
 my $num_top_hits = 1;
 my $KEEP_PSLX = 0;
 my $mask_lower;
-my $min_score = 20;
+my $min_score = 30; # blat default
 my $min_identity = 98;
 
 &GetOptions( 'g=s' => \$opt_g,
