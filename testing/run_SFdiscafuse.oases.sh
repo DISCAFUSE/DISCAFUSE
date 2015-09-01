@@ -1,0 +1,2 @@
+../DISCAFUSE --chimeric_junctions Chimeric.out.junction --left_fq reads_1.fq.gz --right_fq reads_2.fq.gz --out_dir SFdaf_oases_outdir --out_prefix daf --denovo_assembler Oases --genome_fa /seq/regev_genome_portal/RESOURCES/FUSION_ANNOTATOR_LIB/Hg19.fa --cdna_fa /seq/regev_genome_portal/RESOURCES/FUSION_ANNOTATOR_LIB/gencode.v19.annotation.gtf.exons.cdna
+#/seq/regev_genome_portal/RESOURCES/human/Hg19/gencode.v19/gencode.v19.annotation.gtf.CDS
