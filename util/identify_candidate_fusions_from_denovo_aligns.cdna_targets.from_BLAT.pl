@@ -12,6 +12,10 @@ require "overlapping_nucs.ph";
 my $MAX_ALLOWED_PCT_OVERLAP = 10;
 my $MIN_PER_ID = 90;
 my $MIN_ANCHOR_LEN = 30;
+my $PCT_SCORE_CONSIDER_EQUIV = 98;
+
+my $OVERLAP_PENALTY = 2;
+my $GAP_PENALTY = 2;
 
 my $DEBUG = 1;
 
@@ -20,6 +24,7 @@ my $usage = "\n\n\tusage: $0 blat.gff3 cdna_targets.fasta\n\n";
 my $blat_gff3 = $ARGV[0] or die $usage;
 my $cdna_targets_fasta = $ARGV[1] or die $usage;
 
+
 main: {
 
 
@@ -27,55 +32,14 @@ main: {
     unless (-s $headers_file) {
         die "Error, cannot locate $headers_file";
     }
-
+    
     my %trans_id_to_gene_id = &get_trans_to_gene_mapping($headers_file);
-     
+    
     my %trans_to_gene_alignments = &get_trans_to_gene_alignments($blat_gff3, \%trans_id_to_gene_id);
     
     &report_fusion_candidates(\%trans_to_gene_alignments);
     
-
-
-
-    if (0) {
         
-        ## Tier and merge strategy
-
-    
-        my %tiered_n_merged_gene_alignments = &tier_and_merge_best_alignments(\%trans_to_gene_alignments);
-        
-        foreach my $trans_id (keys %tiered_n_merged_gene_alignments) {
-            
-            my @hits = @{$tiered_n_merged_gene_alignments{$trans_id}};
-            @hits = sort {$a->{trans_lend}<=>$b->{trans_lend}} @hits;
-            
-            if (scalar @hits < 2) {
-                # shouldn't happen as filtering is done before this.
-                die "Error, have fewer than 2 candidate fusion parts";
-            }
-            
-            ## Report fusion pairs:
-            my $geneA = shift @hits;
-            while (@hits) {
-                my $geneB = shift @hits;
-                
-                if ($geneA->{gene_orient} eq $geneB->{gene_orient}) {
-                    
-                    my ($left_gene, $right_gene) = ($geneA->{gene_orient} eq '+') ? ($geneA, $geneB) : ($geneB, $geneA);
-                    
-                    my $fusion_name = join("--", $left_gene->{gene_name}, $right_gene->{gene_name});
-                    
-                    print join("\t", $fusion_name, $trans_id,
-                               $left_gene->{gene_name}, $left_gene->{trans_lend}, $left_gene->{trans_rend}, $left_gene->{gene_orient}, $left_gene->{per_id} . "\%ID",
-                               $right_gene->{gene_name}, $right_gene->{trans_lend}, $right_gene->{trans_rend}, $right_gene->{gene_orient}, $right_gene->{per_id} . "\%ID") . "\n";
-                    
-                }
-                
-                $geneA = $geneB;
-            }
-        }
-    }
-    
     exit(0);
 
 
@@ -91,85 +55,59 @@ sub report_fusion_candidates {
 
     foreach my $trans_id (keys %$trans_to_gene_alignments_href) {
         
-        my @aligns = @{$trans_to_gene_alignments_href->{$trans_id}};
+        my @all_aligns = @{$trans_to_gene_alignments_href->{$trans_id}};
         
-        @aligns = sort {$a->{trans_lend}<=>$b->{trans_lend}} @aligns;
+        my @candidate_fusions_to_filter;
+        
 
-        my @fusion_preds;
-
-        for (my $i = 0; $i < $#aligns; $i++) {
-
-            my $align_i = $aligns[$i];
+        foreach my $gene_orient ('+', '-') {
             
-            my $gene_name_i = $align_i->{gene_name};
-            my $lend_i = $align_i->{trans_lend};
-            my $rend_i = $align_i->{trans_rend};
-            my $per_id_i = $align_i->{per_id};
-            my $seg_len_i = $rend_i - $lend_i + 1;
+            my @aligns = grep { $_->{gene_orient} eq $gene_orient } @all_aligns;
+
+            unless (@aligns) { next; }
             
-            if ($seg_len_i < $MIN_ANCHOR_LEN) { next; }
-
-
-            for (my $j = $i + 1; $j <= $#aligns; $j++) {
+            @aligns = sort {$a->{trans_lend}<=>$b->{trans_lend}} @aligns;
+                        
+            my @fusion_preds = &aligns_to_fusion_preds(@aligns);
+            
+            # sorting by score
+            @fusion_preds = reverse sort {$a->[2]<=>$b->[2]} @fusion_preds;
+            
+            my %seen;
+            
+                        
+            foreach my $fusion_pred (@fusion_preds) {
                 
-                my $align_j = $aligns[$j];
+                my ($left_gene, $right_gene, $score) = @$fusion_pred;
                 
-                my $gene_name_j = $align_j->{gene_name};
-                my $lend_j = $align_j->{trans_lend};
-                my $rend_j = $align_j->{trans_rend};
-                my $per_id_j = $align_j->{per_id};
-                my $seg_len_j = $rend_j - $lend_j + 1;
-
-
-                if ($seg_len_j < $MIN_ANCHOR_LEN) { next; }
-
-                my $pct_overlap = &get_percent_overlap([$lend_i, $rend_i], [$lend_j, $rend_j]);
-
-                my $delta = abs($lend_j -1 - $rend_i);
-                my ($overlap_len, $gap_len) = ($lend_j >= $rend_i) ? ($delta, 0) : (0, $delta);
+                ## report candidate
+                my $fusion_name = join("--", $left_gene->{gene_name}, $right_gene->{gene_name});
                 
-
-                if ($pct_overlap < $MAX_ALLOWED_PCT_OVERLAP) {
-
-                    my ($left_gene, $right_gene) = ($align_i->{gene_orient} eq '+') ? ($align_i, $align_j) : ($align_j, $align_i);
+                if ($seen{$fusion_name}) { next; }
+                $seen{$fusion_name} = 1;
+                
+                push (@candidate_fusions_to_filter, { 
+                
+                    trans_id => $trans_id,
+                    left_gene => $left_gene,
+                    right_gene => $right_gene,
+                    fusion_name => $fusion_name,
+                    score => $score,
                     
-                    my $score = ($seg_len_i * $per_id_i) + ($seg_len_j * $per_id_j) 
-                        - ($overlap_len * $per_id_i/2) - ($overlap_len * $per_id_j/2)
-                        - ($gap_len * 100); 
-
-                    push (@fusion_preds, [$left_gene, $right_gene, $score]);
-                    
-                }
+                      } );
+                
             }
-        }
+        } # end of foreach orient
         
-        @fusion_preds = reverse sort {$a->[2]<=>$b->[2]} @fusion_preds;
+        unless (@candidate_fusions_to_filter) { next; }
 
-        my %seen;
-        
-        foreach my $fusion_pred (@fusion_preds) {
 
-            my ($left_gene, $right_gene, $score) = @$fusion_pred;
-            
-            ## report candidate
-            my $fusion_name = join("--", $left_gene->{gene_name}, $right_gene->{gene_name});
-            
-            if ($seen{$fusion_name}) { next; }
-            $seen{$fusion_name} = 1;
-            
-            push (@final_fusion_preds, { 
-                
-                trans_id => $trans_id,
-                left_gene => $left_gene,
-                right_gene => $right_gene,
-                fusion_name => $fusion_name,
-                score => $score,
-                
-                  } );
-            
-        }
+        my @filtered_fusion_preds = &filter_fusion_candidates_by_score(@candidate_fusions_to_filter);
+
+        push (@final_fusion_preds, @filtered_fusion_preds);
         
-    }
+        
+    } # end of foreach trans
     
 
     
@@ -187,8 +125,17 @@ sub report_fusion_candidates {
                                                                          $fusion_pred->{score});
         
         print join("\t", $fusion_name, $trans_id,
-                   $left_gene->{gene_name}, $left_gene->{trans_lend}, $left_gene->{trans_rend}, $left_gene->{gene_orient}, $left_gene->{per_id} . "\%ID",
-                   $right_gene->{gene_name}, $right_gene->{trans_lend}, $right_gene->{trans_rend}, $right_gene->{gene_orient}, $right_gene->{per_id} . "\%ID",
+                   
+                   ## left gene info
+                   $left_gene->{gene_name}, 
+                   join(":", $left_gene->{hit_id}, $left_gene->{hit_lend}, $left_gene->{hit_rend}, $left_gene->{gene_orient}),
+                   $left_gene->{trans_lend}, $left_gene->{trans_rend}, $left_gene->{per_id} . "\%ID",
+                   
+                   ## right gene info
+                   $right_gene->{gene_name},
+                   join(":", $right_gene->{hit_id}, $right_gene->{hit_lend}, $right_gene->{hit_rend}, $right_gene->{gene_orient}),
+                   $right_gene->{trans_lend}, $right_gene->{trans_rend}, $right_gene->{gene_orient}, $right_gene->{per_id} . "\%ID",
+                   
                    $score) . "\n";
         
     }
@@ -223,153 +170,6 @@ sub get_percent_overlap {
 }
                 
 
-
-
-####
-sub tier_and_merge_best_alignments {
-    my ($trans_to_gene_alignments_href) = @_;
-
-    my %trans_id_to_tiers;
-
-    foreach my $trans_id (keys %$trans_to_gene_alignments_href) {
-        
-        my @hits = @{$trans_to_gene_alignments_href->{$trans_id}};
-        
-        my @merged_gene_hits = @hits; #&merge_hits_by_gene(@hits);
-
-        unless (scalar @merged_gene_hits > 1) {
-            next;
-        }
-
-        foreach my $hit (@merged_gene_hits) {
-            $hit->{score} = ($hit->{trans_rend} - $hit->{trans_lend} + 1) * $hit->{per_id};
-        }
-
-        @hits = reverse sort {$a->{score}<=>$b->{score}} @merged_gene_hits;
-        
-        
-        my @tiered_hits;
-        foreach my $hit (@hits) {
-            print STDERR "Testing for tier addition.  Current tier is: " . Dumper(\@tiered_hits) if $DEBUG;
-
-            if (! &overlap_existing_tier_element(\@tiered_hits, $hit)) {
-                push (@tiered_hits, $hit);
-            }
-        }
-        if (scalar @tiered_hits > 1) {
-            $trans_id_to_tiers{$trans_id} = [@tiered_hits];
-        }
-    }
-
-    return(%trans_id_to_tiers);
-    
-}
-
-
-####
-sub overlap_existing_tier_element {
-    my ($tiered_aref, $hit) = @_;
-
-    foreach my $tier_entry (@$tiered_aref) {
-        
-        my $tier_gene_name = $tier_entry->{gene_name};
-        my $tier_lend = $tier_entry->{trans_lend};
-        my $tier_rend = $tier_entry->{trans_rend};
-        my $tier_seg_len = $tier_rend - $tier_lend + 1;
-
-
-        my $hit_gene_name = $hit->{gene_name};
-        my $hit_lend = $hit->{trans_lend};
-        my $hit_rend = $hit->{trans_rend};
-        my $hit_len = $hit_rend - $hit_lend + 1;
-
-
-        print STDERR "TESTING $tier_gene_name vs. $hit_gene_name : ($tier_lend-$tier_rend) vs. ($hit_lend, $hit_rend)\n" if $DEBUG;
-
-        
-        if (&coordsets_overlap([$tier_lend, $tier_rend], [$hit_lend, $hit_rend])) {
-
-            my $smaller_len = ($tier_seg_len < $hit_len) ? $tier_seg_len : $hit_len;
-
-            my $pct_overlap = &nucs_in_common($tier_lend, $tier_rend, $hit_lend, $hit_rend) / $smaller_len * 100;
-            
-            print STDERR "($tier_lend-$tier_rend) vs. ($hit_lend, $hit_rend)\tPCT_Overlap: $pct_overlap\n" if $DEBUG;
-
-            if ($pct_overlap > $MAX_ALLOWED_PCT_OVERLAP) {
-                return(1);
-            }
-        }
-        else {
-            print STDERR "($tier_lend-$tier_rend) vs. ($hit_lend, $hit_rend)\tNO_overlap\n" if $DEBUG;
-        }
-
-    }
-    return(0); # no sufficient overlap found
-    
-}
-        
-        
-
-
-
-####
-sub merge_hits_by_gene {
-    my @hits = @_;
-
-    my %gene_to_hit_list;
-
-    foreach my $hit (@hits) {
-        my $gene_name = $hit->{gene_name};
-        
-        push (@{$gene_to_hit_list{$gene_name}}, $hit);
-    }
-
-
-    ## merge them
-    my @merged_gene_hits;
-
-    foreach my $gene_name (keys %gene_to_hit_list) {
-        my @hits = @{$gene_to_hit_list{$gene_name}};
-        
-        ## todo: check for actual overlaps
-        ## first, keeping it super easy and selecting range of matches 
-
-        my @lend_coords;
-        my @rend_coords;
-        
-        my $sum_len = 0;
-        my $sum_per_id_n_len = 0;
-
-        foreach my $hit (@hits) {
-            push (@lend_coords, $hit->{trans_lend});
-            push (@rend_coords, $hit->{trans_rend});
-        
-            my $seg_len = $hit->{trans_rend} - $hit->{trans_lend} + 1;
-            my $per_id = $hit->{per_id};
-
-            $sum_per_id_n_len += $seg_len * $per_id;
-
-            $sum_len += $seg_len;
-        }
-
-        @lend_coords = sort {$a<=>$b} @lend_coords;
-        @rend_coords = sort {$a<=>$b} @rend_coords;
-
-        my $range_lend = shift @lend_coords;
-        my $range_rend = pop @rend_coords;
-
-
-        my $avg_per_id = sprintf("%.1f", $sum_per_id_n_len / $sum_len);
-        my $hit = shift @hits;
-        $hit->{trans_lend} = $range_lend;
-        $hit->{trans_rend} = $range_rend;
-        $hit->{per_id} = $avg_per_id;
-
-        push (@merged_gene_hits, $hit);
-    }
-
-    return(@merged_gene_hits);
-}
 
 
 
@@ -407,7 +207,7 @@ sub get_trans_to_gene_alignments {
         my $trans_end5 = $2;
         my $trans_end3 = $3;
         
-        $trans_id .= "::$orient";
+        #$trans_id .= "::$orient";
         
         my $gene_name = $trans_id_to_gene_id_href->{$target_trans_id} or die "Error, no gene name for $target_trans_id";
         
@@ -416,6 +216,10 @@ sub get_trans_to_gene_alignments {
                                                    trans_rend => $trans_end3,
                                                    gene_orient => $orient,
                                                    per_id => $per_id,
+                                                   
+                                                   hit_lend => $lend,
+                                                   hit_rend => $rend,
+                                                   hit_id => $target_trans_id,
               }
             );
 
@@ -453,4 +257,90 @@ sub get_trans_to_gene_mapping {
 
 
     return(%trans_id_to_gene_id);
+}
+
+
+####
+sub aligns_to_fusion_preds {
+    my @aligns = @_;
+
+    my @fusion_preds;
+
+    for (my $i = 0; $i < $#aligns; $i++) {
+        
+        my $align_i = $aligns[$i];
+        
+        my $gene_name_i = $align_i->{gene_name};
+        my $lend_i = $align_i->{trans_lend};
+        my $rend_i = $align_i->{trans_rend};
+        my $per_id_i = $align_i->{per_id};
+        my $seg_len_i = $rend_i - $lend_i + 1;
+        
+        if ($seg_len_i < $MIN_ANCHOR_LEN) { next; }
+        
+        
+        for (my $j = $i + 1; $j <= $#aligns; $j++) {
+            
+            my $align_j = $aligns[$j];
+            
+            my $gene_name_j = $align_j->{gene_name};
+            my $lend_j = $align_j->{trans_lend};
+            my $rend_j = $align_j->{trans_rend};
+            my $per_id_j = $align_j->{per_id};
+            my $seg_len_j = $rend_j - $lend_j + 1;
+            
+            
+            if ($gene_name_i eq $gene_name_j) { next; } # no selfies!
+
+            if ($seg_len_j < $MIN_ANCHOR_LEN) { next; }
+            
+            my $pct_overlap = &get_percent_overlap([$lend_i, $rend_i], [$lend_j, $rend_j]);
+            
+            my $delta = abs($lend_j - $rend_i);
+            my ($overlap_len, $gap_len) = ($lend_j <= $rend_i) ? ($delta, 0) : (0, $delta);
+            
+            
+            if ($pct_overlap < $MAX_ALLOWED_PCT_OVERLAP) {
+                
+                my ($left_gene, $right_gene) = ($align_i->{gene_orient} eq '+') ? ($align_i, $align_j) : ($align_j, $align_i);
+                
+                my $score = ($seg_len_i * $per_id_i) + ($seg_len_j * $per_id_j) 
+                    - ($overlap_len * $per_id_i * $OVERLAP_PENALTY) - ($overlap_len * $per_id_j * $OVERLAP_PENALTY)
+                    - ($gap_len * 100 * $GAP_PENALTY); 
+                
+                #print Dumper($left_gene) . Dumper($right_gene) . " Score: $score, delta: $delta, overlap: $overlap_len, gap: $gap_len\n";
+                
+                push (@fusion_preds, [$left_gene, $right_gene, $score]);
+                
+            }
+        }
+    }
+    
+    return(@fusion_preds);
+}
+
+####
+sub filter_fusion_candidates_by_score {
+    my (@fusion_structs) = @_;
+
+    @fusion_structs = reverse sort {$a->{score}<=>$b->{score}} @fusion_structs;
+    
+    my $top_scoring_pred = shift @fusion_structs;
+    my $top_score = $top_scoring_pred->{score};
+
+    my @best_preds = ($top_scoring_pred);
+
+    while (@fusion_structs) {
+        my $fusion_pred = shift @fusion_structs;
+        if ($fusion_pred->{score} / $top_score * 100 >= $PCT_SCORE_CONSIDER_EQUIV) {
+            push (@best_preds, $fusion_pred);
+        }
+        else {
+            last;
+        }
+    }
+
+    #return(@fusion_structs);
+    
+    return(@best_preds);
 }
