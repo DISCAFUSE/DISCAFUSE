@@ -168,131 +168,142 @@ class DiscordAFuse( ParentScript.ParentScript ):
                                                   lstr_cur_products = [assembled_transcripts_filename] ) )
         
 
+
+
+        mode = "gmap_fusion" #"blat_trans"
         
+        if mode == "blat_trans":
 
-        # map to genome
+            # map to genome
 
-        trans_alignment_gff3 = "denovo_asm.gmap.gff3"
-        
-        cmdstr = str(TRINITY_HOME + "/util/misc/process_GMAP_alignments_gff3_chimeras_ok.pl  " +
-                     " --genome " + genome_fasta_filename +
-                     " --transcripts " + assembled_transcripts_filename + 
-                     " --no_chimera > " + trans_alignment_gff3)
+            trans_alignment_gff3 = "denovo_asm.gmap.gff3"
 
-        lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
-                                              lstr_cur_dependencies = [genome_fasta_filename, assembled_transcripts_filename],
-                                              lstr_cur_products = [trans_alignment_gff3] ) )
+            cmdstr = str(TRINITY_HOME + "/util/misc/process_GMAP_alignments_gff3_chimeras_ok.pl  " +
+                         " --genome " + genome_fasta_filename +
+                         " --transcripts " + assembled_transcripts_filename + 
+                         " --no_chimera > " + trans_alignment_gff3)
 
-
-        # compute percent length aligned
-
-        pct_alignment_stats_file = trans_alignment_gff3 + ".align_stats"
-        
-        cmdstr = str(TRINITY_HOME + "/util/misc/gmap_gff3_to_percent_length_stats.pl " +
-                     trans_alignment_gff3 + " " + assembled_transcripts_filename +
-                     " > " + pct_alignment_stats_file)
-
-        lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
-                                              lstr_cur_dependencies = [trans_alignment_gff3, assembled_transcripts_filename],
-                                              lstr_cur_products = [pct_alignment_stats_file] ) )
-
-        
-        
-
-        # filter those that map just fine
-
-        candidate_transcripts_file = pct_alignment_stats_file + ".max_" + `MAX_PCT_ALIGNED_OK` + ".trans.fasta"
-        
-        cmdstr = str(UTILDIR + "/get_partially_or_unmapped_transcripts.py " + pct_alignment_stats_file +
-                     " " + `MAX_PCT_ALIGNED_OK` + " " + assembled_transcripts_filename +
-                     " > " + candidate_transcripts_file)
-
-        lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
-                                              lstr_cur_dependencies = [pct_alignment_stats_file, assembled_transcripts_filename],
-                                              lstr_cur_products = [candidate_transcripts_file] ) )
-        
+            lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
+                                                  lstr_cur_dependencies = [genome_fasta_filename, assembled_transcripts_filename],
+                                                  lstr_cur_products = [trans_alignment_gff3] ) )
 
 
-        # BLAT worked better for this
-        '''
-        # map to transcriptome the ones that dont align fine to the genome
-        trans_chimera_align_file = candidate_transcripts_file + ".trans_gmap_chimallowed.gff3"
-        
-        cmdstr = str(TRINITY_HOME + "/util/misc/process_GMAP_alignments_gff3_chimeras_ok.pl  " +
-                     " --genome " + cdna_fasta_filename +
-                     " --transcripts " + candidate_transcripts_file + 
-                     " > " + trans_chimera_align_file)
+            # compute percent length aligned
 
-        lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
-                                              lstr_cur_dependencies = [cdna_fasta_filename, candidate_transcripts_file],
-                                              lstr_cur_products = [trans_chimera_align_file] ) )
-        
-        
+            pct_alignment_stats_file = trans_alignment_gff3 + ".align_stats"
 
-        # retrieve chimeric gene pairs:
-        trans_chimera_pairs_file = trans_chimera_align_file + ".fusions.dat"
+            cmdstr = str(TRINITY_HOME + "/util/misc/gmap_gff3_to_percent_length_stats.pl " +
+                         trans_alignment_gff3 + " " + assembled_transcripts_filename +
+                         " > " + pct_alignment_stats_file)
 
-        cmdstr = str(UTILDIR + "/identify_candidate_fusions_from_denovo_aligns.cdna_targets.py " +
-                     trans_chimera_align_file + " " + cdna_fasta_filename +
-                     " > " + trans_chimera_pairs_file)
-
-        lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
-                                              lstr_cur_dependencies = [cdna_fasta_filename, trans_chimera_align_file],
-                                              lstr_cur_products = [trans_chimera_pairs_file] ) )
-        
-        '''
-        
-        
-        # BLAT map to transcriptome the ones that dont align fine to the genome
+            lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
+                                                  lstr_cur_dependencies = [trans_alignment_gff3, assembled_transcripts_filename],
+                                                  lstr_cur_products = [pct_alignment_stats_file] ) )
 
 
-        #candidate_transcripts_file = assembled_transcripts_filename
-        
-        trans_chimera_align_file = candidate_transcripts_file + ".trans_blat.gff3"
-        
-        cmdstr = str(UTILDIR + "/discasmfuse_BLAT_trans.pl " +
-                     " -g " + cdna_fasta_filename +
-                     " -t " + candidate_transcripts_file + 
-                     " --mask_lower -N 100 -I 50 -o " + candidate_transcripts_file + ".trans_blat")
-        
-        lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
-                                              lstr_cur_dependencies = [cdna_fasta_filename, candidate_transcripts_file],
-                                              lstr_cur_products = [trans_chimera_align_file] ) )
-        
-        
-
-        # retrieve chimeric gene pairs:
-        trans_chimera_pairs_file = args_parsed.out_prefix + ".fusions.prelim"
-        
-        cmdstr = str(UTILDIR + "/identify_candidate_fusions_from_denovo_aligns.cdna_targets.from_BLAT.pl " +
-                     trans_chimera_align_file + " " + cdna_fasta_filename +
-                     " > " + trans_chimera_pairs_file)
-
-        lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
-                                              lstr_cur_dependencies = [cdna_fasta_filename, trans_chimera_align_file],
-                                              lstr_cur_products = [trans_chimera_pairs_file] ) )
-        
-
-        
 
 
-        # filter the predictions to remove those that hit targets having identical kmers around the putative breakpoint
-        # as per described in Jaffa
-        # though here we restrict it to kmers within a window around the breakpoint.
+            # filter those that map just fine
 
-        kmer_filtered_chimeras = args_parsed.out_prefix + ".fusions.dat"
+            candidate_transcripts_file = pct_alignment_stats_file + ".max_" + `MAX_PCT_ALIGNED_OK` + ".trans.fasta"
 
-        cmdstr = str(UTILDIR + "/screen_fusion_for_kmer_confounders.pl " + trans_chimera_pairs_file + " " +
-                     cdna_fasta_filename + " " + `args_parsed.kmer_size` + " " + `args_parsed.window_size`
-                     + " > " + kmer_filtered_chimeras)
+            cmdstr = str(UTILDIR + "/get_partially_or_unmapped_transcripts.py " + pct_alignment_stats_file +
+                         " " + `MAX_PCT_ALIGNED_OK` + " " + assembled_transcripts_filename +
+                         " > " + candidate_transcripts_file)
 
-        lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
-                                              lstr_cur_dependencies = [cdna_fasta_filename, trans_chimera_pairs_file],
-                                              lstr_cur_products = [kmer_filtered_chimeras] ) )
-                     
-        
-        
-        
+            lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
+                                                  lstr_cur_dependencies = [pct_alignment_stats_file, assembled_transcripts_filename],
+                                                  lstr_cur_products = [candidate_transcripts_file] ) )
+
+
+
+            # BLAT worked better for this
+            '''
+            # map to transcriptome the ones that dont align fine to the genome
+            trans_chimera_align_file = candidate_transcripts_file + ".trans_gmap_chimallowed.gff3"
+
+            cmdstr = str(TRINITY_HOME + "/util/misc/process_GMAP_alignments_gff3_chimeras_ok.pl  " +
+                         " --genome " + cdna_fasta_filename +
+                         " --transcripts " + candidate_transcripts_file + 
+                         " > " + trans_chimera_align_file)
+
+            lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
+                                                  lstr_cur_dependencies = [cdna_fasta_filename, candidate_transcripts_file],
+                                                  lstr_cur_products = [trans_chimera_align_file] ) )
+
+
+
+            # retrieve chimeric gene pairs:
+            trans_chimera_pairs_file = trans_chimera_align_file + ".fusions.dat"
+
+            cmdstr = str(UTILDIR + "/identify_candidate_fusions_from_denovo_aligns.cdna_targets.py " +
+                         trans_chimera_align_file + " " + cdna_fasta_filename +
+                         " > " + trans_chimera_pairs_file)
+
+            lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
+                                                  lstr_cur_dependencies = [cdna_fasta_filename, trans_chimera_align_file],
+                                                  lstr_cur_products = [trans_chimera_pairs_file] ) )
+
+            '''
+
+
+            # BLAT map to transcriptome the ones that dont align fine to the genome
+
+
+            #candidate_transcripts_file = assembled_transcripts_filename
+
+            trans_chimera_align_file = candidate_transcripts_file + ".trans_blat.gff3"
+
+            cmdstr = str(UTILDIR + "/discasmfuse_BLAT_trans.pl " +
+                         " -g " + cdna_fasta_filename +
+                         " -t " + candidate_transcripts_file + 
+                         " --mask_lower -N 100 -I 50 -o " + candidate_transcripts_file + ".trans_blat")
+
+            lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
+                                                  lstr_cur_dependencies = [cdna_fasta_filename, candidate_transcripts_file],
+                                                  lstr_cur_products = [trans_chimera_align_file] ) )
+
+
+
+            # retrieve chimeric gene pairs:
+            trans_chimera_pairs_file = args_parsed.out_prefix + ".fusions.prelim"
+
+            cmdstr = str(UTILDIR + "/identify_candidate_fusions_from_denovo_aligns.cdna_targets.from_BLAT.pl " +
+                         trans_chimera_align_file + " " + cdna_fasta_filename +
+                         " > " + trans_chimera_pairs_file)
+
+            lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
+                                                  lstr_cur_dependencies = [cdna_fasta_filename, trans_chimera_align_file],
+                                                  lstr_cur_products = [trans_chimera_pairs_file] ) )
+
+
+
+
+
+            # filter the predictions to remove those that hit targets having identical kmers around the putative breakpoint
+            # as per described in Jaffa
+            # though here we restrict it to kmers within a window around the breakpoint.
+
+            kmer_filtered_chimeras = args_parsed.out_prefix + ".fusions.dat"
+
+            cmdstr = str(UTILDIR + "/screen_fusion_for_kmer_confounders.pl " + trans_chimera_pairs_file + " " +
+                         cdna_fasta_filename + " " + `args_parsed.kmer_size` + " " + `args_parsed.window_size`
+                         + " > " + kmer_filtered_chimeras)
+
+            lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
+                                                  lstr_cur_dependencies = [cdna_fasta_filename, trans_chimera_pairs_file],
+                                                  lstr_cur_products = [kmer_filtered_chimeras] ) )
+
+
+        else:
+            # GMAP-Fusion mode
+
+            cmdstr = str("/home/unix/bhaas/GITHUB/Trinity_CTAT/fusion/GMAP-Fusion -T " + 
+                         assembled_transcripts_filename + " -o gmap_fusion_outdir")
+
+            lcmd_commands.append(Command.Command( str_cur_command = cmdstr,
+                                                  lstr_cur_dependencies = [assembled_transcripts_filename],
+                                                  lstr_cur_products = ["gmap_fusion_outdir/GMAP-Fusion.report.xls"]) )
 
 
         return lcmd_commands

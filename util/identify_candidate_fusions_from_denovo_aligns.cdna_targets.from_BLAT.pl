@@ -327,6 +327,8 @@ sub filter_fusion_candidates_by_score {
     
     my $top_scoring_pred = shift @fusion_structs;
     my $top_score = $top_scoring_pred->{score};
+    
+    unless ($top_score > 0) { return (); }
 
     my @best_preds = ($top_scoring_pred);
 
