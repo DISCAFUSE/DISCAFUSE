@@ -121,13 +121,17 @@ main: {
     ## merge the kmer assemblies:
     my $cmd = "velveth mergedAsm $mergeK -long " . join(" ", @kmer_assemblies);
     $pipeliner->add_commands(new Command($cmd, "mergedAsm.velveth.ok"));
+    push (@checkpoints_to_cleanup, "mergedAsm.velveth.ok");
 
     $cmd = "velvetg mergedAsm -read_trkg yes -conserveLong yes";
     $pipeliner->add_commands(new Command($cmd, "mergedAsm.velvetg.ok"));
-    
+    push (@checkpoints_to_cleanup, "mergedAsm.velvetg.ok");
+
     $cmd = "oases mergedAsm -merge yes -min_trans_lgth $min_length";
     $pipeliner->add_commands(new Command($cmd, "mergedAsm.oases.ok"));
-
+    push (@checkpoints_to_cleanup, "mergedAsm.oases.ok");
+    
+    
     push (@dirs_to_cleanup, "mergedAsm");
 
     $pipeliner->run();
